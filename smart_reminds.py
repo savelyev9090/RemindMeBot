@@ -24,5 +24,5 @@ async def check_reminders():
         next_interval = calculate_next_interval(deadline, now)
 
         if last_reminder is None or (now - last_reminder >= next_interval):
-            await send_reminder(reminder["message"])
+            await send_reminder(reminder["message"]) #отправка сообщения
             reminder["last_reminder"] = now
