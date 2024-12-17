@@ -3,17 +3,18 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from config import Settings
+from database.config import Settings
 
 Base = declarative_base()
 
 
 class User(Base):
     __tablename__ = "users"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, nullable=False)
-    phone_number = Column(String(20), nullable=True)
+    phone_number = Column(String(20), nullable=False)
+    age = Column(Integer, nullable=True)
     reminders = relationship("Reminder", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
@@ -26,8 +27,9 @@ class Reminder(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     deadline = Column(DateTime, nullable=False)
-    description = Column(String(500), nullable=False)
-    interval_hours = Column(Integer, nullable=False)
+    description = Column(String(500), nullable=True)
+    title = Column(String(500), nullable=True)
+    interval_hours = Column(Integer, nullable=True)
     user = relationship("User", back_populates="reminders")
 
     def __repr__(self):

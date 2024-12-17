@@ -1,19 +1,29 @@
 from datetime import datetime
-
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
-
-import source.keyboards.reply as rkb
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.future import select
+from database.config import Settings
+from source.keyboards.reply import check_keyboard, main_menu
 from source.utils.states import Reminder
 from source.messages.templates import MESSAGES, BUTTONS
+from database.database import Reminder as DBReminder
 
 router = Router()
+
+# Создаем engine для синхронной работы с базой данных
+engine = create_engine(Settings.DATABASE_URL, connect_args={"options": "-c timezone=utc"})
+Session = sessionmaker(bind=engine)
 
 # Вспомогательная функция для проверки даты и времени
 def is_future_datetime(date: datetime) -> bool:
     return date > datetime.now()
 
+# Функция для получения сессии
+def get_session():
+    return Session()
 
 # Обработка времени
 @router.message(Reminder.enter_time)
@@ -26,7 +36,6 @@ async def process_reminder_time(message: Message, state: FSMContext):
         await message.answer(MESSAGES["prompt_date"])
     except ValueError:
         await message.answer(MESSAGES["invalid_format_time"])
-
 
 # Обработка даты
 @router.message(Reminder.enter_date)
@@ -48,7 +57,6 @@ async def process_reminder_date(message: Message, state: FSMContext):
     except ValueError:
         await message.answer(MESSAGES["invalid_format_date"])
 
-
 # Обработка названия
 @router.message(Reminder.enter_title)
 async def process_reminder_title(message: Message, state: FSMContext):
@@ -61,7 +69,6 @@ async def process_reminder_title(message: Message, state: FSMContext):
     await state.set_state(Reminder.enter_description)
     await message.answer(MESSAGES["prompt_description"])
 
-
 # Обработка описания
 @router.message(Reminder.enter_description)
 async def process_reminder_description(message: Message, state: FSMContext):
@@ -73,141 +80,122 @@ async def process_reminder_description(message: Message, state: FSMContext):
     reminder_datetime = user_data["reminder_datetime"]
     title = user_data["title"]
 
-    # Сохранение напоминания
-    await state.update_data(reminder={
-        "time": reminder_datetime,
-        "title": title,
-        "description": description,
-    })
-
-    await message.answer(
-        MESSAGES["reminder_created"].format(
-            time=reminder_datetime.strftime("%H:%M %d.%m.%Y"),
+    user_id = message.from_user.id
+    session = get_session()
+    try:
+        new_reminder = DBReminder(
+            user_id=user_id,
+            deadline=reminder_datetime,
             title=title,
-            description=description or "Без описания"
-        ),
-        reply_markup=rkb.check_keyboard
-    )
-    await state.set_state(None)
+            description=description
+        )
+        session.add(new_reminder)
+        session.commit()
 
-
-# Подтверждение напоминания
-@router.message(F.text == BUTTONS["confirm_reminder"])
-async def confirm_reminder(message: Message, state: FSMContext):
-    user_data = await state.get_data()
-    reminder = user_data["reminder"]
-
-    if reminder:
-        # Сохранение напоминания в базу данных
         await message.answer(
-            MESSAGES["reminder_saved"].format(
-                time=reminder["time"].strftime("%H:%M %d.%m.%Y"),
-                title=reminder["title"],
-                description=reminder["description"] or "Без описания"
-        ),
-        reply_markup=rkb.main_menu)
-    else:
-        await message.answer("У вас нет текущего создающегося напоминания.")
+            MESSAGES["reminder_created"].format(
+                time=reminder_datetime.strftime("%H:%M %d.%m.%Y"),
+                title=title,
+                description=description or "Без описания"
+            ),
+            reply_markup=check_keyboard
+        )
+    finally:
+        session.close()
 
     await state.clear()
 
+# Подтверждение напоминания
+@router.message(F.text == BUTTONS["confirm_reminder"])
+async def confirm_reminder(message: Message):
+    user_id = message.from_user.id
+    session = get_session()
+    try:
+        result = session.execute(select(DBReminder).filter_by(user_id=user_id))
+        reminders = result.scalars().all()
 
-# Начало редактирования напоминания с кнопками
+        if reminders:
+            for reminder in reminders:
+                await message.answer(
+                    MESSAGES["reminder_saved"].format(
+                        time=reminder.deadline.strftime("%H:%M %d.%m.%Y"),
+                        title=reminder.title,
+                        description=reminder.description or "Без описания"
+                    ),
+                    reply_markup=main_menu
+                )
+        else:
+            await message.answer("У вас нет текущего создающегося напоминания.")
+    finally:
+        session.close()
+
+# Редактирование напоминания
 @router.message(F.text == BUTTONS["edit_reminder"])
-async def edit_reminder_command(message: Message, state: FSMContext):
-    user_data = await state.get_data()
-    reminder = user_data.get("reminder")
-    if not reminder:
-        await message.answer("У вас нет текущего создающегося напоминания.")
-        return
+async def edit_reminder_command(message: Message):
+    user_id = message.from_user.id
+    session = get_session()
+    try:
+        result = session.execute(select(DBReminder).filter_by(user_id=user_id))
+        reminders = result.scalars().all()
 
-    # Переходим в режим редактирования
-    await state.set_state(Reminder.edit_reminder)
-    await message.answer(
-        MESSAGES["edit_reminder"],
-        reply_markup=rkb.edit_keyboard
-    )
+        if not reminders:
+            await message.answer("У вас нет напоминаний для редактирования.")
+            return
 
+        reminder_texts = [f"{r.id}. {r.title} ({r.deadline.strftime('%d.%m.%Y %H:%M')})" for r in reminders]
+        await message.answer("Выберите напоминание для редактирования:\n" + "\n".join(reminder_texts))
+    finally:
+        session.close()
 
 # Редактирование времени
-@router.message(F.text == BUTTONS["edit_time"])
-async def edit_time(message: Message, state: FSMContext):
-    await state.set_state(Reminder.edit_time)
-    await message.answer("Введите новое время в формате <b>HH:MM</b>:")
-
-
-# Редактирование даты
-@router.message(F.text == BUTTONS["edit_date"])
-async def edit_date(message: Message, state: FSMContext):
-    await state.set_state(Reminder.edit_date)
-    await message.answer("Введите новую дату в формате <b>DD.MM.YYYY</b>:")
-
-
-# Редактирование названия
-@router.message(F.text == BUTTONS["edit_title"])
-async def edit_title(message: Message, state: FSMContext):
-    await state.set_state(Reminder.edit_title)
-    await message.answer("Введите новое название напоминания:")
-
-
-# Редактирование описания
-@router.message(F.text == BUTTONS["edit_description"])
-async def edit_description(message: Message, state: FSMContext):
-    await state.set_state(Reminder.edit_description)
-    await message.answer("Введите новое описание напоминания:")
-
-
-# Обработка изменения времени
 @router.message(Reminder.edit_time)
 async def process_edit_time(message: Message, state: FSMContext):
     user_input = message.text.strip()
     try:
         new_time = datetime.strptime(user_input, "%H:%M").time()
         user_data = await state.get_data()
-        reminder = user_data.get("reminder")
+        reminder_id = user_data["reminder_id"]
 
-        # Обновляем время текущего напоминания
-        current_date = reminder["time"].date()
-        updated_datetime = datetime.combine(current_date, new_time)
-        reminder["time"] = updated_datetime
-        await state.update_data(reminder=reminder)
+        session = get_session()
+        try:
+            reminder = session.get(DBReminder, reminder_id)
+            if not reminder:
+                await message.answer("Напоминание не найдено.")
+                return
 
-        await message.answer(f"🕒 Время успешно изменено на {new_time.strftime('%H:%M')}.")
-        await message.answer(
-            f"Текущее напоминание: \n🕒 Время: {updated_datetime.strftime('%H:%M')}\n"
-            f"📅 Дата: {updated_datetime.strftime('%d.%m.%Y')}\n"
-            f"📌 Название: {reminder['title']}\n"
-            f"📝 Описание: {reminder['description'] or 'Без описания'}"
-        )
-        await message.answer(MESSAGES["edit_reminder"], reply_markup=rkb.edit_keyboard)
+            reminder.deadline = reminder.deadline.replace(hour=new_time.hour, minute=new_time.minute)
+            session.commit()
+
+            await message.answer(f"🕒 Время успешно изменено на {new_time.strftime('%H:%M')}.")
+        finally:
+            session.close()
     except ValueError:
         await message.answer("⛔ Неверный формат. Введите время в формате <b>HH:MM</b>.")
 
-
-# Обработка изменения даты
+# Редактирование даты
 @router.message(Reminder.edit_date)
 async def process_edit_date(message: Message, state: FSMContext):
     user_input = message.text.strip()
     try:
         new_date = datetime.strptime(user_input, "%d.%m.%Y").date()
         user_data = await state.get_data()
-        reminder = user_data.get("reminder")
+        reminder_id = user_data["reminder_id"]
 
-        # Обновляем дату текущего напоминания
-        reminder["time"] = reminder["time"].replace(year=new_date.year, month=new_date.month, day=new_date.day)
-        await state.update_data(reminder=reminder)
+        session = get_session()
+        try:
+            reminder = session.get(DBReminder, reminder_id)
+            if not reminder:
+                await message.answer("Напоминание не найдено.")
+                return
 
-        await message.answer(f"📅 Дата успешно изменена на {new_date.strftime('%d.%m.%Y')}.")
-        await message.answer(
-            f"Текущее напоминание: \n🕒 Время: {reminder['time'].strftime('%H:%M')}\n"
-            f"📅 Дата: {new_date.strftime('%d.%m.%Y')}\n"
-            f"📌 Название: {reminder['title']}\n"
-            f"📝 Описание: {reminder['description'] or 'Без описания'}"
-        )
-        await message.answer(MESSAGES["edit_reminder"], reply_markup=rkb.edit_keyboard)
+            reminder.deadline = datetime.combine(new_date, reminder.deadline.time())
+            session.commit()
+
+            await message.answer(f"📅 Дата успешно изменена на {new_date.strftime('%d.%m.%Y')}.")
+        finally:
+            session.close()
     except ValueError:
         await message.answer("⛔ Неверный формат. Введите дату в формате <b>DD.MM.YYYY</b>.")
-
 
 # Обработка изменения названия
 @router.message(Reminder.edit_title)
@@ -218,21 +206,28 @@ async def process_edit_title(message: Message, state: FSMContext):
         return
 
     user_data = await state.get_data()
-    reminder = user_data.get("reminder")
+    reminder_id = user_data["reminder_id"]
 
-    # Обновляем название текущего напоминания
-    reminder["title"] = new_title
-    await state.update_data(reminder=reminder)
+    session = get_session()
+    try:
+        reminder = session.get(DBReminder, reminder_id)
+        if not reminder:
+            await message.answer("Напоминание не найдено.")
+            return
 
-    await message.answer(f"📌 Название успешно изменено на {new_title}.")
-    await message.answer(
-        f"Текущее напоминание: \n🕒 Время: {reminder['time'].strftime('%H:%M')}\n"
-        f"📅 Дата: {reminder['time'].strftime('%d.%m.%Y')}\n"
-        f"📌 Название: {new_title}\n"
-        f"📝 Описание: {reminder['description'] or 'Без описания'}"
-    )
-    await message.answer(MESSAGES["edit_reminder"], reply_markup=rkb.edit_keyboard)
+        reminder.title = new_title
+        session.commit()
 
+        await message.answer(f"📌 Название успешно изменено на {new_title}.")
+        await message.answer(
+            f"Текущее напоминание: \n🕒 Время: {reminder.deadline.strftime('%H:%M')}\n"
+            f"📅 Дата: {reminder.deadline.strftime('%d.%m.%Y')}\n"
+            f"📌 Название: {new_title}\n"
+            f"📝 Описание: {reminder.description or 'Без описания'}"
+        )
+        await message.answer(MESSAGES["edit_reminder"], reply_markup=main_menu)
+    finally:
+        session.close()
 
 # Обработка изменения описания
 @router.message(Reminder.edit_description)
@@ -242,17 +237,25 @@ async def process_edit_description(message: Message, state: FSMContext):
         new_description = None
 
     user_data = await state.get_data()
-    reminder = user_data.get("reminder")
+    reminder_id = user_data["reminder_id"]
 
-    # Обновляем описание текущего напоминания
-    reminder["description"] = new_description
-    await state.update_data(reminder=reminder)
+    session = get_session()
+    try:
+        reminder = session.get(DBReminder, reminder_id)
+        if not reminder:
+            await message.answer("Напоминание не найдено.")
+            return
 
-    await message.answer(f"📝 Описание успешно изменено на: {new_description or 'Без описания'}.")
-    await message.answer(
-        f"Текущее напоминание: \n🕒 Время: {reminder['time'].strftime('%H:%M')}\n"
-        f"📅 Дата: {reminder['time'].strftime('%d.%m.%Y')}\n"
-        f"📌 Название: {reminder['title']}\n"
-        f"📝 Описание: {new_description or 'Без описания'}"
-    )
-    await message.answer(MESSAGES["edit_reminder"], reply_markup=rkb.edit_keyboard)
+        reminder.description = new_description
+        session.commit()
+
+        await message.answer(f"📝 Описание успешно изменено на: {new_description or 'Без описания'}.")
+        await message.answer(
+            f"Текущее напоминание: \n🕒 Время: {reminder.deadline.strftime('%H:%M')}\n"
+            f"📅 Дата: {reminder.deadline.strftime('%d.%m.%Y')}\n"
+            f"📌 Название: {reminder.title}\n"
+            f"📝 Описание: {new_description or 'Без описания'}"
+        )
+        await message.answer(MESSAGES["edit_reminder"], reply_markup=main_menu)
+    finally:
+        session.close()
