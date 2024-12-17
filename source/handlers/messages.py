@@ -1,8 +1,10 @@
+from datetime import datetime
+
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from source.utils.states import UserState
+from source.utils.states import UserStates, Reminder
 
 import source.keyboards.reply as rkb
 
@@ -12,6 +14,14 @@ router = Router()
 
 @router.message(F.text == BUTTONS["menu_button"])
 async def main_menu_command(message: Message, state: FSMContext):
-    await state.set_state(UserState.main_menu)
+    await state.set_state(UserStates.main_menu)
     await message.answer(MESSAGES["main_menu"], reply_markup=rkb.main_menu)
+
+@router.message(F.text == BUTTONS["make_a_reminder"])
+async def make_a_reminder_command(message: Message, state: FSMContext):
+    await state.set_state(Reminder.enter_time)
+    await message.answer(
+        "Введите время напоминания в формате: <b>HH:MM</b>\n\n"
+        "Пример: <i>14:30</i>",
+    )
 

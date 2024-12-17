@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 
 import source.keyboards.reply as rkb
-from source.utils.states import UserState, RegState
+from source.utils.states import UserStates, RegState
 
 router = Router()
 
@@ -69,7 +69,7 @@ def create_confirmation_markup():
 # Шаги регистрации
 @router.message(F.text == BUTTONS["registration_button"])
 async def start_registration(message: Message, state: FSMContext):
-    await message.answer(MESSAGES["name_request"])
+    await message.answer(MESSAGES["registration_message"])
     await state.set_state(RegState.name)
 
 @router.message(RegState.name)
@@ -131,7 +131,7 @@ async def confirm_data(message: Message, state: FSMContext):
         if save_user_to_json(user_data):
             await message.answer(MESSAGES["registration_complete"], reply_markup=rkb.menu_button)
             await state.clear()
-            await state.set_state(UserState.main_menu)
+            await state.set_state(UserStates.main_menu)
         else:
             await message.answer("Произошла ошибка при сохранении данных. Попробуйте позже.")
     elif user_response == BUTTONS["edit"]:

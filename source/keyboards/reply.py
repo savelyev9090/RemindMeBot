@@ -34,3 +34,22 @@ if BUTTONS:
         ],
         resize_keyboard=True
     )
+
+    check_keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BUTTONS.get("confirm_reminder", "Confirm"))],
+            [KeyboardButton(text=BUTTONS.get("edit_reminder", "Edit"))]
+        ],
+        resize_keyboard=True
+    )
+
+    edit_keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BUTTONS.get("edit_title", "Edit Title")),
+             KeyboardButton(text=BUTTONS.get("edit_description", "Edit Description"))],
+            [KeyboardButton(text=BUTTONS.get("edit_time", "Edit Time")),
+             KeyboardButton(text=BUTTONS.get("edit_date", "Edit Reminder"))],
+            [KeyboardButton(text=BUTTONS.get("save_changes", "Save Changes"))]
+        ],
+        resize_keyboard=True
+    )

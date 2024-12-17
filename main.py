@@ -7,6 +7,7 @@ from source.handlers import commands
 from source.handlers import messages
 
 from source.utils import registration
+from source.utils import reminder_creation
 
 bot = Bot(token=settings.bot_token.get_secret_value(), default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
@@ -15,6 +16,7 @@ def include_all_routers(dp):
     dp.include_router(commands.router)
     dp.include_router(messages.router)
     dp.include_router(registration.router)
+    dp.include_router(reminder_creation.router)
 
 async def main():
     try:
