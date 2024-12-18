@@ -2,7 +2,7 @@ import json
 
 def load_messages_and_buttons(language: str):
     try:
-        with open(f"/Users/savelyev90/Desktop/RemindMe/source/messages/{language}.json", "r", encoding="utf-8") as file:
+        with open(f"/Users/leonidserbin/Downloads/RemindMe/source/messages/{language}.json", "r", encoding="utf-8") as file:
             return json.load(file)
     except FileNotFoundError:
         print(f"Error: The file for language '{language}' was not found.")

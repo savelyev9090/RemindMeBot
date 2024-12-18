@@ -7,20 +7,20 @@ import source.keyboards.reply as rkb
 from source.utils.states import UserStates, RegState
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from database.database import User
-from database.config import Settings
+from Database.database import User
+from Database.config import Settings
 
 router = Router()
 
 # Логирование ошибок
 logger = logging.getLogger(__name__)
 
-engine = create_engine(Settings.DATABASE_URL, connect_args={"options": "-c timezone=utc"})
+engine = create_engine(Settings.DATABASE_URL, connect_args={"options": "-c timezone=utc+3"})
 Session = sessionmaker(bind=engine)
 
 # Путь к файлам
-USER_DATA_PATH = "/Users/leonidserbin/Downloads/RemindMe/source/users.json"
-MESSAGES_PATH = "/Users/leonidserbin/Downloads/RemindMe/source/messages/ru.json"
+USER_DATA_PATH = '/Users/leonidserbin/Downloads/RemindMe/source/users.json'
+MESSAGES_PATH = '/Users/leonidserbin/Downloads/RemindMe/source/messages/ru.json'
 
 
 # Сохранение данных пользователя в JSON

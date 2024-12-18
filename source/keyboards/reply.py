@@ -37,7 +37,7 @@ if BUTTONS:
 
     check_keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=BUTTONS.get("confirm_reminder", "Confirm"))],
+            [KeyboardButton(text=BUTTONS.get("save_changes", "Save Changes"))],
             [KeyboardButton(text=BUTTONS.get("edit_reminder", "Edit"))]
         ],
         resize_keyboard=True

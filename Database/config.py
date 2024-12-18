@@ -11,3 +11,5 @@ class Settings:
     POSTGRES_PORT = os.getenv("POSTGRES_PORT", 5432)
     DB_NAME = os.getenv("DB_NAME")
     DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{DB_NAME}"
+    SENDER_EMAIL = "reminder.bot@mail.ru"
+    SENDER_PASSWORD = "MmdHVWTnjaUCXGU0iAC8"
